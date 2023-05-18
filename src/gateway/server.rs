@@ -21,7 +21,7 @@ struct Gateway {
 
 impl Gateway {
     fn new() -> Self {
-        let network = IpNet::from_str("10.89.0.1/16").unwrap();
+        let network = IpNet::from_str("10.0.0.1/16").unwrap();
         let gateway = match network {
             IpNet::V4(v) => v.addr(),
             IpNet::V6(_) => panic!("not supported yet"),
