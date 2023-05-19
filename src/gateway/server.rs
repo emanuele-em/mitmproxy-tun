@@ -3,12 +3,15 @@ use ipnet::IpNet;
 use log::{error, info};
 
 use std::{
+    format,
     net::Ipv4Addr,
     println,
     process::{self, Command},
     str::FromStr,
 };
 use tun::AsyncDevice;
+
+use pnet::packet::{ip::IpNextHeaderProtocols, ipv4};
 
 pub async fn serve() {
     Gateway::new().serve().await;
@@ -37,7 +40,33 @@ impl Gateway {
 
         while let Some(packet) = stream.next().await {
             if let Ok(packet) = packet {
-                println!("{:?}", packet);
+                let mut packet = packet.get_bytes().to_vec();
+                let v4 = ipv4::Ipv4Packet::new(&mut packet).unwrap();
+                let _src = v4.get_source();
+                let dst = v4.get_destination();
+                let protocol = v4.get_next_level_protocol();
+                let process_list = Command::new("sh")
+                    .arg("-c")
+                    .arg(format!("lsof -Pni | grep {}", dst))
+                    .output()
+                    .unwrap();
+                let std_out = String::from_utf8_lossy(&process_list.stdout);
+                let std_err = String::from_utf8_lossy(&process_list.stderr);
+
+                if !process_list.status.success() {
+                    println!("{std_err}");
+                }
+                let process_name = match std_out.split_whitespace().next() {
+                    Some(process_name) => process_name,
+                    _ => "NO PROCESS(?)",
+                };
+
+                match protocol {
+                    IpNextHeaderProtocols::Icmp => println!("{process_name} -> ICMP to {:?}", dst),
+                    IpNextHeaderProtocols::Udp => println!("{process_name} -> UDP to {:?}", dst),
+                    IpNextHeaderProtocols::Tcp => println!("{process_name} -> TCP to {:?}", dst),
+                    _ => println!("OTHER"),
+                }
             }
         }
     }
